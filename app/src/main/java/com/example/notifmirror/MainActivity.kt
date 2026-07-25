@@ -1,15 +1,15 @@
 package com.example.notifmirror
 
 import android.content.Intent
-import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.text.format.Formatter
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import android.widget.Button
 import android.widget.TextView
+import java.net.NetworkInterface
+import java.util.Collections
 
 class MainActivity : AppCompatActivity() {
 
@@ -22,17 +22,17 @@ class MainActivity : AppCompatActivity() {
         val permButton = findViewById<Button>(R.id.permButton)
         val startButton = findViewById<Button>(R.id.startButton)
 
-        // Show the IP the laptop needs to connect to (works for Wi-Fi or hotspot)
-        val wifiManager = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
-        val ip = Formatter.formatIpAddress(wifiManager.connectionInfo.ipAddress)
-        ipText.text = "Connect the laptop to:\nws://$ip:${LocalServer.PORT}"
+        val ip = getLocalIpAddress()
+        ipText.text = if (ip != null) {
+            "Connect the laptop to:\nws://$ip:${LocalServer.PORT}"
+        } else {
+            "Could not detect IP.\nMake sure Wi-Fi or Hotspot is ON, then reopen the app."
+        }
 
-        // Notification access has to be granted manually in system settings
         permButton.setOnClickListener {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
 
-        // Ask for POST_NOTIFICATIONS on Android 13+ (needed for our own foreground service notice)
         if (Build.VERSION.SDK_INT >= 33) {
             ActivityCompat.requestPermissions(
                 this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 100
@@ -43,5 +43,22 @@ class MainActivity : AppCompatActivity() {
             startForegroundService(Intent(this, ServerService::class.java))
             statusText.text = "Server running on port ${LocalServer.PORT}"
         }
+    }
+
+    private fun getLocalIpAddress(): String? {
+        try {
+            val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
+            for (intf in interfaces) {
+                val addrs = Collections.list(intf.inetAddresses)
+                for (addr in addrs) {
+                    if (!addr.isLoopbackAddress && addr.hostAddress?.contains(":") == false) {
+                        return addr.hostAddress
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return null
     }
 }
